@@ -1,6 +1,7 @@
 package org.example;
 
 import java.util.Collections;
+import java.util.List;
 
 public class BPlusTree {
     private BPlusTreeNode root;
@@ -12,6 +13,9 @@ public class BPlusTree {
         }
         this.order = order;
         this.root = new BPlusTreeNode(true);
+    }
+    public BPlusTree(){
+        this(3);
     }
 
     // Find the appropriate leaf node for insertion
@@ -36,6 +40,12 @@ public class BPlusTree {
         if(leaf.keys.size() > order - 1){
             splitLeaf(leaf);
         }
+    }
+
+    public void insertMany(List<Integer> keys){
+        Collections.sort(keys);
+        keys.forEach(this::insert);
+
     }
 
     // Insert into the leaf node
