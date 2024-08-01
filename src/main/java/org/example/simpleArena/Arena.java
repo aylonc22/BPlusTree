@@ -37,11 +37,10 @@ public class Arena implements AutoCloseable {
 public ByteBuffer getBuffer(int startOffset){
     if (isDisposed)
         throw new IllegalStateException("Arena has been disposed.");
+    if(startOffset == -1)
+        throw  new IllegalArgumentException("startOffset cannot be -1");
     if(startOffset <= allocatedBytes){
-        ByteBuffer segment = memoryBlock.duplicate();
-        segment.position(startOffset);
-        segment.limit(startOffset);
-        var res = tryAllocate(segment.getInt(0),startOffset,Byte.class);
+        var res = tryAllocate(memoryBlock.getInt(startOffset),startOffset,Byte.class);
         return res.isSuccess()?res.getBuffer():null;
     }
     return null;
@@ -60,7 +59,7 @@ public ByteBuffer getBuffer(int startOffset){
         if(allocationSize + startOffset <= allocatedBytes){
             ByteBuffer segment = memoryBlock.duplicate();
             segment.position(startOffset);
-            segment.limit(allocationSize);
+            segment.limit(startOffset + allocationSize);
 
             return new AllocationResult(true,segment);
         }
@@ -145,7 +144,6 @@ public ByteBuffer getBuffer(int startOffset){
     public void close() {
         dispose();
     }
-
     //region setters && getters
     public boolean isDisposed() {
         return isDisposed;
