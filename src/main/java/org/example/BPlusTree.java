@@ -38,11 +38,29 @@ public class BPlusTree {
     private final int leafNodeSize;
     private final int maxKeys;
     private final int  SEGMENT_SIZE = 4;
-    private final int MAX_KEYS_POSITION = 4;
     private final int KEY_SIZE = 4;
     private final int VALUE_SIZE = 8;
     private final int NEXT_LEAF_POINTER_SIZE = 4;
     private final int PARENT_POINTER = 4;
+    //Positions
+    //SEGMENT_SIZE_POSITION = SEGMENT.Position
+    private int MAX_KEYS_POSITION(int bufferPosition){
+     return bufferPosition + SEGMENT_SIZE;
+    }
+    private int KEY_POSITION(int bufferPosition,int index){
+        return MAX_KEYS_POSITION(bufferPosition) + KEY_SIZE*index;
+    }
+    private int VALUE_POSITION(int bufferPosition,int index){
+        return KEY_POSITION(bufferPosition,maxKeys) + VALUE_SIZE * index;
+    }
+    private int CHILD_POSITION(int bufferPosition,int index){
+        return KEY_POSITION(bufferPosition,maxKeys+1) + NEXT_LEAF_POINTER_SIZE * index;
+    }
+    private int PARENT_POSITION(int bufferPosition,boolean isNode){
+        return isNode?CHILD_POSITION(bufferPosition,maxKeys+1):VALUE_POSITION(bufferPosition,maxKeys+1);
+    }
+
+
 
     public BPlusTree(int size,int maxKeys) {
         if(maxKeys<3){
@@ -70,9 +88,14 @@ public class BPlusTree {
 public void insertMany(HashMap<Integer,Long> items){
         for(var item:items.entrySet()){
             insert(item.getKey(),item.getValue());
+            System.out.println("////////////////////////////");
+            printTree();
         }
 }
     public void insert(int key,long value){
+        if(key == 4){
+            int i = 0;
+        }
         if(search(key)!= -1){
             throw new IllegalArgumentException("Key must be unique!");
         }
@@ -85,12 +108,19 @@ public void insertMany(HashMap<Integer,Long> items){
             rootNode.setNumKeys(1);
             rootNode.setKey(0,key);
             rootNode.setValuePointer(0,value);
-            rootNode.setNextLeafPointer(-1);//No next leaf initially
-            rootNode.setParentPointer(-1);
             rootNodeOffset = rootBuffer.position();
         }
         else {
+            var rootBuffer = arena.getBuffer(rootNodeOffset);
+            if(needSplitRoot(rootBuffer) && !isLeafNode(rootBuffer)){
+               var newRootBuffer = arena.allocate(nodeSize,Byte.class);
+               new BPlusTreeNode(newRootBuffer,maxKeys,nodeSize,-1);
+               splitChild(newRootBuffer,rootBuffer);
+               rootNodeOffset = newRootBuffer.position();
+;               rootBuffer.putInt(rootBuffer.position()+ SEGMENT_SIZE + KEY_SIZE +  KEY_SIZE * maxKeys + NEXT_LEAF_POINTER_SIZE * (maxKeys+1) ,newRootBuffer.position());
+            }
             insertIntoNode(rootNodeOffset,key,value);
+
         }
 }
 private void insertIntoNode(int nodeOffset,int key,long value){
@@ -100,6 +130,7 @@ private void insertIntoNode(int nodeOffset,int key,long value){
             insetIntoLeaf(nodeBuffer,key,value);
         }
         else {
+
             int childOffset = findChild(nodeBuffer,key);
             var childBuffer = arena.getBuffer(childOffset);
             if(needSplit(childBuffer)){
@@ -202,43 +233,58 @@ private void insertIntoParentNode(ByteBuffer currentNodeBuffer,BPlusTreeLeafNode
     //TODO
     //check validation of the buffer positions in the new methods
 private void insertIntoFullParent(ByteBuffer parentNodeBuffer,int medianKey,int newChildOffset){
-        int numKeys = parentNodeBuffer.getInt(parentNodeBuffer.position()+MAX_KEYS_POSITION);
+    int numKeys = parentNodeBuffer.getInt(parentNodeBuffer.position() + SEGMENT_SIZE);
+    int insertIndex = 0;
 
-        int index = numKeys;
-        while (index>0 && medianKey < parentNodeBuffer.getInt(parentNodeBuffer.position()+SEGMENT_SIZE + MAX_KEYS_POSITION + (index -1) * KEY_SIZE)){
-            parentNodeBuffer.putInt(parentNodeBuffer.position()+SEGMENT_SIZE + MAX_KEYS_POSITION + index * KEY_SIZE,parentNodeBuffer.getInt(
-                    parentNodeBuffer.position()+SEGMENT_SIZE + MAX_KEYS_POSITION + (index -1) * KEY_SIZE));
-            parentNodeBuffer.putInt(parentNodeBuffer.position()+SEGMENT_SIZE + MAX_KEYS_POSITION * KEY_SIZE + index * NEXT_LEAF_POINTER_SIZE,
-                    parentNodeBuffer.position()+SEGMENT_SIZE + MAX_KEYS_POSITION * KEY_SIZE + (index-1) * NEXT_LEAF_POINTER_SIZE);
-            index--;
-        }
+    // Find the index to insert the new key
+    while (insertIndex < numKeys && medianKey > parentNodeBuffer.getInt(parentNodeBuffer.position() + SEGMENT_SIZE + MAX_KEYS_POSITION + insertIndex * KEY_SIZE)) {
+        insertIndex++;
+    }
 
-        parentNodeBuffer.putInt(parentNodeBuffer.position()+SEGMENT_SIZE + MAX_KEYS_POSITION + index * KEY_SIZE,medianKey);
-        parentNodeBuffer.putInt(parentNodeBuffer.position()+SEGMENT_SIZE + MAX_KEYS_POSITION * KEY_SIZE + index * NEXT_LEAF_POINTER_SIZE,newChildOffset);
-        parentNodeBuffer.putInt(parentNodeBuffer.position()+MAX_KEYS_POSITION,numKeys + 1);
+    // Shift keys to the right
+    for (int i = numKeys; i > insertIndex; i--) {
+        parentNodeBuffer.putInt(parentNodeBuffer.position() + SEGMENT_SIZE + MAX_KEYS_POSITION + i * KEY_SIZE, parentNodeBuffer.getInt(parentNodeBuffer.position() + SEGMENT_SIZE + MAX_KEYS_POSITION + (i - 1) * KEY_SIZE));
+    }
+
+    // Shift child pointers to the right
+    for (int i = numKeys + 1; i > insertIndex + 1; i--) {
+        parentNodeBuffer.putInt(parentNodeBuffer.position() + SEGMENT_SIZE + MAX_KEYS_POSITION + maxKeys * KEY_SIZE + i * NEXT_LEAF_POINTER_SIZE, parentNodeBuffer.getInt(parentNodeBuffer.position() + SEGMENT_SIZE + MAX_KEYS_POSITION + maxKeys * KEY_SIZE + (i - 1) * NEXT_LEAF_POINTER_SIZE));
+    }
+
+    // Insert the new key and update the child pointer
+    parentNodeBuffer.putInt(parentNodeBuffer.position() + SEGMENT_SIZE + MAX_KEYS_POSITION + insertIndex * KEY_SIZE, medianKey);
+    parentNodeBuffer.putInt(parentNodeBuffer.position() + SEGMENT_SIZE + MAX_KEYS_POSITION + maxKeys * KEY_SIZE + (insertIndex + 1) * NEXT_LEAF_POINTER_SIZE, newChildOffset);
+
+    // Update the number of keys in the parent
+    parentNodeBuffer.putInt(parentNodeBuffer.position() + SEGMENT_SIZE, numKeys + 1);
 }
 private boolean needSplit(ByteBuffer childBuffer){
-        return childBuffer.getInt(childBuffer.position()+KEY_SIZE) >= maxKeys ;
+        return childBuffer.getInt(childBuffer.position()+KEY_SIZE) > maxKeys-1 ;
+}
+private boolean needSplitRoot(ByteBuffer rootBuffer){
+        return rootBuffer.getInt(rootBuffer.position()+KEY_SIZE)>= maxKeys-1;
 }
 private void splitChild(ByteBuffer parentNodeBuffer, ByteBuffer childNodeBuffer){
-        int numKeys = parentNodeBuffer.getInt(4);
+        int numKeys = parentNodeBuffer.getInt(parentNodeBuffer.position()+MAX_KEYS_POSITION);
         int childIndex = 0;
 
-        while(childIndex<numKeys && parentNodeBuffer.getInt(parentNodeBuffer.position()+4 + 4 + maxKeys * 4 + childIndex *4) != childNodeBuffer.position()){
+        while(childIndex<numKeys && parentNodeBuffer.getInt(parentNodeBuffer.position()+MAX_KEYS_POSITION + KEY_SIZE + maxKeys * KEY_SIZE + childIndex *PARENT_POINTER) != childNodeBuffer.position()){
             childIndex++;
         }
 
         var newChildBuffer = arena.allocate(nodeSize,Byte.class);
         var newChildNode = new BPlusTreeNode(newChildBuffer,maxKeys,nodeSize,parentNodeBuffer.position());
 
-        int splitIndex = childNodeBuffer.getInt(childNodeBuffer.position()+4) / 2;
+        int splitIndex = childNodeBuffer.getInt(childNodeBuffer.position()+KEY_SIZE) / 2;
         for(int i = splitIndex + 1;i<childNodeBuffer.getInt(childNodeBuffer.position()+4);i++){
             newChildNode.setKey(i - splitIndex - 1,childNodeBuffer.get(childNodeBuffer.position()+4+ 4 + i*4));
             newChildNode.setChildPointer(i-splitIndex -1, childNodeBuffer.getInt(childNodeBuffer.position()+4 + 4 + maxKeys * 4 + i * 4));
         }
 
         childNodeBuffer.putInt(childNodeBuffer.position()+4,splitIndex + 1);
-        newChildBuffer.putInt(newChildBuffer.position()+4,newChildBuffer.getInt(newChildBuffer.position()) - splitIndex - 1);
+        newChildBuffer.putInt(newChildBuffer.position()+MAX_KEYS_POSITION,splitIndex);
+        if(childNodeBuffer.position() == rootNodeOffset)
+            printBuffer(newChildBuffer);
 
         for(int i=numKeys; i> childIndex;i--){
             parentNodeBuffer.putInt(parentNodeBuffer.position()+4 + 4 + i * 4,parentNodeBuffer.getInt(parentNodeBuffer.position()+4 + (i -1) * 4));
@@ -249,6 +295,9 @@ private void splitChild(ByteBuffer parentNodeBuffer, ByteBuffer childNodeBuffer)
     parentNodeBuffer.putInt(parentNodeBuffer.position()+4 + 4 + maxKeys * 4 + childIndex * 4, newChildBuffer.position());
 
     parentNodeBuffer.putInt(parentNodeBuffer.position()+4, numKeys + 1);
+    if(childNodeBuffer.position()==rootNodeOffset){
+        rootNodeOffset = parentNodeBuffer.position();
+    }
 }
 public long search(int key){
         if(rootNodeOffset == -1){
@@ -441,7 +490,7 @@ private void redistributeFromLeftSibling(ByteBuffer parentNodeBuffer,ByteBuffer 
             int numKeys = nodeBuffer.getInt(nodeBuffer.position() + MAX_KEYS_POSITION);
 
             // Print node keys
-            System.out.print("Node at offset " + currentNodeOffset + " [");
+            System.out.print((!isLeafNode(nodeBuffer)?"Node":"Leaf") +" at offset " + currentNodeOffset + " [");
             for (int i = 0; i < numKeys; i++) {
                 if (i > 0) {
                     System.out.print(", ");
@@ -465,7 +514,7 @@ public void close(){
 
     /**
      * For testing purposes
-     * @param buffer buffer I want to ShowCase
+     * @param buffer buffer We want to ShowCase
      */
     private void printBuffer(ByteBuffer buffer){
         int size = buffer.getInt(buffer.position());
@@ -477,30 +526,40 @@ public void close(){
         }
 }
 private void printNodeBuffer(ByteBuffer nodeBuffer){
-    System.out.println("NodeBuffer");
-    System.out.println("OffSet: " + nodeBuffer.position());
+    try{
+        System.out.println("NodeBuffer");
+        System.out.println("OffSet: " + nodeBuffer.position());
         System.out.println("Size: " + nodeBuffer.getInt(nodeBuffer.position()));
-    int numKeys = nodeBuffer.getInt(nodeBuffer.position() + SEGMENT_SIZE);
-    System.out.println("Keys: " + numKeys);
-    for(int i=0;i<numKeys;i++){
-        System.out.println("Key: " + nodeBuffer.getInt(nodeBuffer.position() + SEGMENT_SIZE + KEY_SIZE + KEY_SIZE * i));
-        System.out.println("Left ChildOffSet: " + nodeBuffer.getInt(nodeBuffer.position() + SEGMENT_SIZE + KEY_SIZE +  KEY_SIZE * maxKeys + NEXT_LEAF_POINTER_SIZE * i ));
-        System.out.println("Right ChildOffSet: " + nodeBuffer.getInt(nodeBuffer.position() + SEGMENT_SIZE + KEY_SIZE +  KEY_SIZE * maxKeys + NEXT_LEAF_POINTER_SIZE * (i + 1) ));
+        int numKeys = nodeBuffer.getInt(nodeBuffer.position() + SEGMENT_SIZE);
+        System.out.println("Keys: " + numKeys);
+        for(int i=0;i<numKeys;i++){
+            System.out.println("Key: " + nodeBuffer.getInt(nodeBuffer.position() + SEGMENT_SIZE + KEY_SIZE + KEY_SIZE * i));
+            System.out.println("Left ChildOffSet: " + nodeBuffer.getInt(nodeBuffer.position() + SEGMENT_SIZE + KEY_SIZE +  KEY_SIZE * maxKeys + NEXT_LEAF_POINTER_SIZE * i ));
+            System.out.println("Right ChildOffSet: " + nodeBuffer.getInt(nodeBuffer.position() + SEGMENT_SIZE + KEY_SIZE +  KEY_SIZE * maxKeys + NEXT_LEAF_POINTER_SIZE * (i + 1) ));
+        }
+        System.out.println("ParentOffSet: " + nodeBuffer.getInt(nodeBuffer.position()+ SEGMENT_SIZE + KEY_SIZE +  KEY_SIZE * maxKeys + NEXT_LEAF_POINTER_SIZE * (maxKeys+1)));
     }
-    System.out.println("ParentOffSet: " + nodeBuffer.getInt(nodeBuffer.position()+ SEGMENT_SIZE + KEY_SIZE +  KEY_SIZE * maxKeys + NEXT_LEAF_POINTER_SIZE * (maxKeys+1)));
+    catch (Exception e){
+        System.out.println("Buffer is not Node");
+    }
 }
 private void printLeafBuffer(ByteBuffer leafBuffer){
-    System.out.println("LeafBuffer");
-    System.out.println("OffSet: " + leafBuffer.position());
-    System.out.println("Size: " + leafBuffer.getInt(leafBuffer.position()));
-    int numKeys = leafBuffer.getInt(leafBuffer.position() + SEGMENT_SIZE);
-    System.out.println("Keys && Values: " + numKeys);
-    for(int i=0;i<numKeys;i++){
-        System.out.println("Key: " + leafBuffer.getInt(leafBuffer.position() + SEGMENT_SIZE + KEY_SIZE + KEY_SIZE * i));
-        System.out.println("Value: " + leafBuffer.getLong(leafBuffer.position() + SEGMENT_SIZE + KEY_SIZE +  KEY_SIZE * maxKeys + VALUE_SIZE * i ));
-    }
-    //buffer.position() + SEGMENT_SIZE +KEY_SIZE + maxKeys * KEY_SIZE + maxKeys * VALUE_POINTER_SIZE
-    System.out.println("NextLeaf: " + leafBuffer.getInt(leafBuffer.position()+ SEGMENT_SIZE + KEY_SIZE +  KEY_SIZE * maxKeys + VALUE_SIZE * maxKeys));
-    System.out.println("ParentOffSet: " + leafBuffer.getInt(leafBuffer.position()+ SEGMENT_SIZE + KEY_SIZE +  KEY_SIZE * maxKeys + VALUE_SIZE * maxKeys + NEXT_LEAF_POINTER_SIZE));
+   try {
+       System.out.println("LeafBuffer");
+       System.out.println("OffSet: " + leafBuffer.position());
+       System.out.println("Size: " + leafBuffer.getInt(leafBuffer.position()));
+       int numKeys = leafBuffer.getInt(leafBuffer.position() + SEGMENT_SIZE);
+       System.out.println("Keys && Values: " + numKeys);
+       for(int i=0;i<numKeys;i++){
+           System.out.println("Key: " + leafBuffer.getInt(leafBuffer.position() + SEGMENT_SIZE + KEY_SIZE + KEY_SIZE * i));
+           System.out.println("Value: " + leafBuffer.getLong(leafBuffer.position() + SEGMENT_SIZE + KEY_SIZE +  KEY_SIZE * maxKeys + VALUE_SIZE * i ));
+       }
+       //buffer.position() + SEGMENT_SIZE +KEY_SIZE + maxKeys * KEY_SIZE + maxKeys * VALUE_POINTER_SIZE
+       System.out.println("NextLeaf: " + leafBuffer.getInt(leafBuffer.position()+ SEGMENT_SIZE + KEY_SIZE +  KEY_SIZE * maxKeys + VALUE_SIZE * maxKeys));
+       System.out.println("ParentOffSet: " + leafBuffer.getInt(leafBuffer.position()+ SEGMENT_SIZE + KEY_SIZE +  KEY_SIZE * maxKeys + VALUE_SIZE * maxKeys + NEXT_LEAF_POINTER_SIZE));
+   }
+   catch (Exception e){
+       System.out.println("Buffer is not Leaf");
+   }
 }
 }

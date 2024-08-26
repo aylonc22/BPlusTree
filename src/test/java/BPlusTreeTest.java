@@ -1,10 +1,7 @@
 import org.example.BPlusTree;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 import static org.junit.Assert.*;
 
@@ -53,7 +50,7 @@ public class BPlusTreeTest {
    public void should_inert_many(){
       var tree = new BPlusTree();
       var items = new HashMap<Integer,Long>();
-      for(int i = 0;i<4;i++){
+      for(int i = 0;i<5;i++){
          items.put(i,50 + (long)(Math.random() * 51));
       }
       tree.insertMany(items);
