@@ -1,4 +1,4 @@
-package org.example;
+package org.example.oldVersion;
 
 import java.nio.ByteBuffer;
 
@@ -27,7 +27,7 @@ public class BPlusTreeNode {
     public int getNumKeys() {
         return buffer.getInt(buffer.position() +4);
     }
-
+public ByteBuffer getBuffer(){return this.buffer;}
     public void setNumKeys(int numKeys) {
         buffer.putInt(buffer.position() +4, numKeys);
     }
@@ -41,11 +41,11 @@ public class BPlusTreeNode {
     }
 
     public int getChildPointer(int index) {
-        return buffer.getInt(buffer.position() +4+4 + maxKeys * keySize + index * childPointerSize);
+        return buffer.getInt(buffer.position() +4+4 + maxKeys * keySize +4+ index * childPointerSize);
     }
 
     public void setChildPointer(int index, int pointer) {
-        buffer.putInt(buffer.position() +4+4 + maxKeys * keySize + index * childPointerSize, pointer);
+        buffer.putInt(buffer.position() +4+4 + maxKeys * keySize +4+ index * childPointerSize, pointer);
     }
     public void setParentPointer(int parentPointer){
         buffer.putInt(buffer.position() +4 +KEY_SIZE + maxKeys * KEY_SIZE + (maxKeys+1) * CHILD_POINTER_SIZE,parentPointer);

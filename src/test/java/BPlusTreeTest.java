@@ -1,4 +1,4 @@
-import org.example.BPlusTree;
+import org.example.oldVersion.BPlusTree;
 import org.junit.Test;
 
 import java.util.HashMap;
@@ -45,12 +45,13 @@ public class BPlusTreeTest {
       var tree = new BPlusTree();
       tree.insert(3,4);
       tree.insert(2,4);
+      tree.printTree();
    }
    @Test
    public void should_inert_many(){
       var tree = new BPlusTree();
       var items = new HashMap<Integer,Long>();
-      for(int i = 0;i<5;i++){
+      for(int i = 0;i<10;i++){
          items.put(i,50 + (long)(Math.random() * 51));
       }
       tree.insertMany(items);
@@ -60,7 +61,7 @@ public class BPlusTreeTest {
    public  void should_split_root(){
       var tree = new BPlusTree();
       var items = new HashMap<Integer,Long>();
-      for(int i = 0;i<3;i++){
+      for(int i = 0;i<4;i++){
          items.put(i,50 + (long)(Math.random() * 51));
       }
       tree.insertMany(items);
