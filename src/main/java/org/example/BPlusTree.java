@@ -1,21 +1,29 @@
-package org.example.temp;
+package org.example;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 public class BPlusTree {
     private static final int DEFAULT_ORDER = 3;
+    private static final int DEFAULT_MB = 1;
     private ByteBuffer buffer;
-    private BPlusTreeNode root;
+    public BPlusTreeNode root;
     private int order;
 
-    public BPlusTree(ByteBuffer buffer) {
-        this(buffer, DEFAULT_ORDER);
+    public BPlusTree() {
+        this(DEFAULT_MB, DEFAULT_ORDER);
     }
 
-    public BPlusTree(ByteBuffer buffer, int order) {
-        this.buffer = buffer;
+    public BPlusTree(int MB, int order) {
+        if(MB < 1){
+            throw new IllegalArgumentException("Memory mus be 1 MB or more");
+        }
+        if(order < 3){
+            throw new IllegalArgumentException("order must be 3 or more");
+        }
+        this.buffer = ByteBuffer.allocate((1024 * 1024) * MB);
         this.buffer.order(ByteOrder.BIG_ENDIAN);
         this.order = order;
         this.root = new BPlusTreeNode(true, allocateNode()); // Root starts as a leaf
@@ -28,6 +36,11 @@ public class BPlusTree {
         return position;
     }
 
+    public void insertMany(HashMap<Integer,String> items){
+        for(var item:items.entrySet()){
+            insert(item.getKey(), item.getValue());
+        }
+    }
     public void insert(int key, String value) {
         BPlusTreeNode leaf = findLeaf(root, key);
         int index = leaf.keys.indexOf(key);
@@ -169,7 +182,6 @@ public class BPlusTree {
         if (index != -1) {
             leaf.keys.remove(index);
             leaf.values.remove(index);
-
             if (leaf.keys.size() < (order - 1) / 2 && leaf != root) {
                 handleUnderflow(leaf);
             }
@@ -187,6 +199,7 @@ public class BPlusTree {
             } else {
                 mergeWithLeftSibling(parent, index, node, leftSibling);
             }
+            serializeNode(leftSibling);
         } else if (index < parent.childrenOffsets.size() - 1) {
             BPlusTreeNode rightSibling = BPlusTreeNode.deserialize(buffer, parent.childrenOffsets.get(index + 1));
             if (rightSibling.keys.size() > (order - 1) / 2) {
@@ -194,52 +207,109 @@ public class BPlusTree {
             } else {
                 mergeWithRightSibling(parent, index, node, rightSibling);
             }
+            serializeNode(rightSibling);
         }
-    }
-    private void borrowFromLeftSibling(BPlusTreeNode parent, int index, BPlusTreeNode node, BPlusTreeNode leftSibling) {
-        int parentKeyIndex = index - 1;
-        int parentKey = parent.keys.get(parentKeyIndex);
+        serializeNode(parent);
 
-        node.keys.add(0, parentKey);
-        node.values.add(0, leftSibling.values.remove(leftSibling.keys.size() - 1));
-        parent.keys.set(parentKeyIndex, leftSibling.keys.remove(leftSibling.keys.size() - 1));
-        node.childrenOffsets.add(0, leftSibling.childrenOffsets.remove(leftSibling.childrenOffsets.size() - 1));
+    }
+
+    private void borrowFromLeftSibling(BPlusTreeNode parent, int index, BPlusTreeNode node, BPlusTreeNode leftSibling) {
+        if (node.isLeaf) {
+            // Leaf node
+            int parentKeyIndex = index - 1;
+            int parentKey = parent.keys.get(parentKeyIndex);
+
+            //moving key
+            int movingKey = leftSibling.keys.remove(leftSibling.keys.size() - 1);
+
+            node.keys.add(0, movingKey);
+            node.values.add(0, leftSibling.values.remove(leftSibling.values.size() - 1));
+            parent.keys.set(parentKeyIndex,movingKey );
+        } else {
+            // Internal node
+            int parentKeyIndex = index - 1;
+            int parentKey = parent.keys.get(parentKeyIndex);
+
+            node.keys.add(0, parentKey);
+            node.childrenOffsets.add(0, leftSibling.childrenOffsets.remove(leftSibling.childrenOffsets.size() - 1));
+            parent.keys.set(parentKeyIndex, leftSibling.keys.remove(leftSibling.keys.size() - 1));
+        }
     }
 
     private void borrowFromRightSibling(BPlusTreeNode parent, int index, BPlusTreeNode node, BPlusTreeNode rightSibling) {
-        int parentKeyIndex = index;
-        int parentKey = parent.keys.get(parentKeyIndex);
+        if (node.isLeaf) {
+            // Leaf node
+            int parentKeyIndex = index;
+            int parentKey = parent.keys.get(parentKeyIndex);
 
-        node.keys.add(parentKey);
-        node.values.add(rightSibling.values.remove(0));
-        parent.keys.set(parentKeyIndex, rightSibling.keys.remove(0));
-        node.childrenOffsets.add(rightSibling.childrenOffsets.remove(0));
+            node.keys.add(parentKey);
+            node.values.add(rightSibling.values.remove(0));
+            parent.keys.set(parentKeyIndex, rightSibling.keys.remove(0));
+        } else {
+            // Internal node
+            int parentKeyIndex = index;
+            int parentKey = parent.keys.get(parentKeyIndex);
+
+            node.keys.add(parentKey);
+            node.childrenOffsets.add(rightSibling.childrenOffsets.remove(0));
+            parent.keys.set(parentKeyIndex, rightSibling.keys.remove(0));
+        }
     }
 
     private void mergeWithLeftSibling(BPlusTreeNode parent, int index, BPlusTreeNode node, BPlusTreeNode leftSibling) {
-        int parentKeyIndex = index - 1;
-        int parentKey = parent.keys.get(parentKeyIndex);
+        int parentKeyIndex = index - 1; // The index of the key in the parent separating the nodes
 
-        leftSibling.keys.add(parentKey);
+        // Combine the current node with the left sibling
         leftSibling.keys.addAll(node.keys);
-        leftSibling.values.addAll(node.values);
         leftSibling.childrenOffsets.addAll(node.childrenOffsets);
 
+        // Remove the key from the parent and the current node from the parent's children list
         parent.keys.remove(parentKeyIndex);
         parent.childrenOffsets.remove(index);
+
+        // Serialize the updated nodes
+        serializeNode(leftSibling);
+        serializeNode(parent);
+
+        // Handle the case where the parent node becomes underflowed
+        if (parent.keys.size() < (order - 1) / 2 && parent != root) {
+            handleUnderflow(parent);
+        }
+        // Handle the case where the parent node is empty
+        if(parent.keys.isEmpty()){
+            int midIndex = (leftSibling.keys.size() - 1) / 2;
+            parent.keys.add(leftSibling.keys.get(midIndex));
+        }
     }
 
     private void mergeWithRightSibling(BPlusTreeNode parent, int index, BPlusTreeNode node, BPlusTreeNode rightSibling) {
-        int parentKeyIndex = index;
-        int parentKey = parent.keys.get(parentKeyIndex);
+        int parentKeyIndex = index; // The index of the parent key separating `node` and `rightSibling`
 
-        node.keys.add(parentKey);
+        // Merge the current node with the right sibling
         node.keys.addAll(rightSibling.keys);
-        node.values.addAll(rightSibling.values);
-        node.childrenOffsets.addAll(rightSibling.childrenOffsets);
+        if (node.isLeaf) {
+            node.values.addAll(rightSibling.values);
+        } else {
+            node.childrenOffsets.addAll(rightSibling.childrenOffsets);
+        }
 
+        // Remove the parent key and the right sibling from the parent’s children list
         parent.keys.remove(parentKeyIndex);
         parent.childrenOffsets.remove(index + 1);
+
+        // Serialize the updated nodes
+        serializeNode(node);
+        serializeNode(parent);
+
+        // Handle the case where parent node becomes underflowed
+        if (parent.keys.size() < (order - 1) / 2 && parent != root) {
+            handleUnderflow(parent);
+        }
+        // Handle the case where the parent node is empty
+        if(parent.keys.isEmpty()){
+            int midIndex = (rightSibling.keys.size() - 1) / 2;
+            parent.keys.add(rightSibling.keys.get(midIndex));
+        }
     }
 
     private void serializeNode(BPlusTreeNode node) {
@@ -262,21 +332,14 @@ public class BPlusTree {
     }
 
     public static void main(String[] args) {
-        ByteBuffer buffer = ByteBuffer.allocate(1024 * 1024); // 1 MB buffer
-        BPlusTree tree = new BPlusTree(buffer);
+        BPlusTree tree = new BPlusTree();
 
         // Test insertion
         tree.insert(10, "Value10");
         tree.insert(20, "Value20");
-        tree.insert(30, "Value30");
-        tree.insert(40, "Value40");
-        tree.insert(50, "Value50");
-        tree.insert(60, "Value60");
-        tree.insert(70, "Value70");
-        tree.insert(80, "Value80");
-        tree.insert(90, "Value90");
-        tree.insert(90, "Value99");
-        tree.insert(100, "Value100");
+        tree.insert(5,"da");
+
+        tree.delete(20);
 
         // Print the tree
         tree.printTree(tree.root, "");
