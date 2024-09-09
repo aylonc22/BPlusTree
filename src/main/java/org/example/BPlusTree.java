@@ -1,60 +1,102 @@
 package org.example;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+/**
+ * A B+ Tree implementation with an arena allocator for efficient memory management.
+ * The B+ Tree supports insertion, deletion, and search operations.
+ */
 public class BPlusTree {
-    private static final int DEFAULT_ORDER = 3;
-    private static final int DEFAULT_MB = 1;
-    private ByteBuffer buffer;
-    public BPlusTreeNode root;
-    private int order;
+    private static final int DEFAULT_ORDER = 3; // Default order (maximum number of children per node)
+    private static final int DEFAULT_MB = 1; // Default memory size (in megabytes) for the tree
+    private ByteBuffer buffer; // Byte buffer to store the serialized nodes
+    public BPlusTreeNode root; // Root node of the B+ Tree
+    private int order; // Order of the B+ Tree
 
+    /**
+     * Default constructor initializing the B+ Tree with default memory size and order.
+     */
     public BPlusTree() {
         this(DEFAULT_MB, DEFAULT_ORDER);
     }
 
+    /**
+     * Constructor to initialize the B+ Tree with specified memory size and order.
+     *
+     * @param MB The memory size in megabytes.
+     * @param order The order of the B+ Tree.
+     */
     public BPlusTree(int MB, int order) {
-        if(MB < 1){
-            throw new IllegalArgumentException("Memory mus be 1 MB or more");
+        if (MB < 1) {
+            throw new IllegalArgumentException("Memory must be 1 MB or more");
         }
-        if(order < 3){
-            throw new IllegalArgumentException("order must be 3 or more");
+        if (order < 3) {
+            throw new IllegalArgumentException("Order must be 3 or more");
         }
+        // Allocate buffer with the given memory size and set byte order
         this.buffer = ByteBuffer.allocate((1024 * 1024) * MB);
         this.buffer.order(ByteOrder.BIG_ENDIAN);
         this.order = order;
-        this.root = new BPlusTreeNode(true, allocateNode()); // Root starts as a leaf
+        // Initialize the root as a leaf node and serialize it
+        this.root = new BPlusTreeNode(true, allocateNode());
         serializeNode(root);
     }
 
+    /**
+     * Allocate space for a new node in the buffer.
+     *
+     * @return The position where the node is allocated.
+     */
     private int allocateNode() {
         int position = buffer.position();
         buffer.position(position + 1024); // Allocate space for the node
         return position;
     }
 
-    public void insertMany(HashMap<Integer,String> items){
-        for(var item:items.entrySet()){
+    /**
+     * Insert multiple key-value pairs into the B+ Tree.
+     *
+     * @param items A map containing key-value pairs to be inserted.
+     */
+    public void insertMany(HashMap<Integer, String> items) {
+        for (var item : items.entrySet()) {
             insert(item.getKey(), item.getValue());
         }
     }
+
+    /**
+     * Insert a key-value pair into the B+ Tree.
+     *
+     * @param key The key to insert.
+     * @param value The value associated with the key.
+     */
     public void insert(int key, String value) {
         BPlusTreeNode leaf = findLeaf(root, key);
         int index = leaf.keys.indexOf(key);
-        if(index != -1){
-            leaf.values.set(index,value);
+        if (index != -1) {
+            // Update the value if key already exists
+            leaf.values.set(index, value);
             serializeNode(leaf);
-        }
-        else if (leaf.keys.size() < order - 1) {
+        } else if (leaf.keys.size() < order - 1) {
+            // Insert the key-value pair into the leaf node
             insertInLeaf(leaf, key, value);
         } else {
+            // Split the leaf node if it is full
             splitLeaf(leaf, key, value);
         }
     }
 
+    /**
+     * Find the leaf node where a key should be located.
+     *
+     * @param node The current node.
+     * @param key The key to find.
+     * @return The leaf node containing the key.
+     */
     private BPlusTreeNode findLeaf(BPlusTreeNode node, int key) {
         while (!node.isLeaf) {
             int i = 0;
@@ -67,6 +109,13 @@ public class BPlusTree {
         return node;
     }
 
+    /**
+     * Insert a key-value pair into a leaf node.
+     *
+     * @param leaf The leaf node.
+     * @param key The key to insert.
+     * @param value The value associated with the key.
+     */
     private void insertInLeaf(BPlusTreeNode leaf, int key, String value) {
         int index = 0;
         while (index < leaf.keys.size() && key > leaf.keys.get(index)) {
@@ -77,10 +126,18 @@ public class BPlusTree {
         serializeNode(leaf);
     }
 
+    /**
+     * Split a leaf node and distribute its keys and values between the original and new leaf nodes.
+     *
+     * @param leaf The leaf node to split.
+     * @param key The key to insert into the leaf.
+     * @param value The value associated with the key.
+     */
     private void splitLeaf(BPlusTreeNode leaf, int key, String value) {
-        int t = (order - 1) / 2;
+        int t = (order - 1) / 2; // Number of keys in each split node
         BPlusTreeNode newLeaf = new BPlusTreeNode(true, allocateNode());
 
+        // Prepare lists to redistribute keys and values
         List<Integer> allKeys = new ArrayList<>(leaf.keys);
         List<String> allValues = new ArrayList<>(leaf.values);
         int insertIndex = 0;
@@ -90,11 +147,13 @@ public class BPlusTree {
         allKeys.add(insertIndex, key);
         allValues.add(insertIndex, value);
 
+        // Split the keys and values between the old and new leaf nodes
         newLeaf.keys.addAll(allKeys.subList(t + 1, allKeys.size()));
         newLeaf.values.addAll(allValues.subList(t + 1, allValues.size()));
         leaf.keys = new ArrayList<>(allKeys.subList(0, t + 1));
         leaf.values = new ArrayList<>(allValues.subList(0, t + 1));
 
+        // Update the root if necessary
         if (leaf == root) {
             BPlusTreeNode newRoot = new BPlusTreeNode(false, allocateNode());
             newRoot.keys.add(newLeaf.keys.get(0));
@@ -118,8 +177,13 @@ public class BPlusTree {
         serializeNode(newLeaf);
     }
 
+    /**
+     * Split an internal node and distribute its keys and children between the original and new internal nodes.
+     *
+     * @param node The internal node to split.
+     */
     private void splitInternalNode(BPlusTreeNode node) {
-        int t = (order -1) / 2; // Number of keys in each split node
+        int t = (order - 1) / 2; // Number of keys in each split node
         BPlusTreeNode newInternal = new BPlusTreeNode(false, allocateNode());
 
         // Calculate the middle index
@@ -130,7 +194,7 @@ public class BPlusTree {
         newInternal.childrenOffsets.addAll(node.childrenOffsets.subList(mid + 1, node.childrenOffsets.size()));
 
         // Adjust the current node
-        node.keys = new ArrayList<>(node.keys.subList(0, mid +1));
+        node.keys = new ArrayList<>(node.keys.subList(0, mid + 1));
         node.childrenOffsets = new ArrayList<>(node.childrenOffsets.subList(0, mid + 1));
 
         if (node == root) {
@@ -157,6 +221,13 @@ public class BPlusTree {
         serializeNode(newInternal);
     }
 
+    /**
+     * Find the parent of a given child node.
+     *
+     * @param node The current node.
+     * @param child The child node.
+     * @return The parent node, or null if not found.
+     */
     private BPlusTreeNode findParent(BPlusTreeNode node, BPlusTreeNode child) {
         if (!node.isLeaf && node.childrenOffsets.contains(child.offset)) {
             return node;
@@ -170,11 +241,24 @@ public class BPlusTree {
         }
         return null;
     }
+
+    /**
+     * Search for a key in the B+ Tree and return its associated value.
+     *
+     * @param key The key to search for.
+     * @return The value associated with the key, or null if the key is not found.
+     */
     public Object search(int key) {
         BPlusTreeNode leaf = findLeaf(root, key);
         int index = leaf.keys.indexOf(key);
         return index != -1 ? leaf.values.get(index) : null;
     }
+
+    /**
+     * Delete a key from the B+ Tree.
+     *
+     * @param key The key to delete.
+     */
     public void delete(int key) {
         BPlusTreeNode leaf = findLeaf(root, key);
         int index = leaf.keys.indexOf(key);
@@ -182,12 +266,19 @@ public class BPlusTree {
         if (index != -1) {
             leaf.keys.remove(index);
             leaf.values.remove(index);
+            // Handle underflow if necessary
             if (leaf.keys.size() < (order - 1) / 2 && leaf != root) {
                 handleUnderflow(leaf);
             }
         }
         serializeNode(leaf);
     }
+
+    /**
+     * Handle the underflow situation in a node by either borrowing from or merging with siblings.
+     *
+     * @param node The node with underflow.
+     */
     private void handleUnderflow(BPlusTreeNode node) {
         BPlusTreeNode parent = findParent(root, node);
         int index = parent.childrenOffsets.indexOf(node.offset);
@@ -210,23 +301,28 @@ public class BPlusTree {
             serializeNode(rightSibling);
         }
         serializeNode(parent);
-
     }
 
+    /**
+     * Borrow a key and child from the left sibling.
+     *
+     * @param parent The parent node.
+     * @param index The index of the node in the parent's children list.
+     * @param node The current node.
+     * @param leftSibling The left sibling node.
+     */
     private void borrowFromLeftSibling(BPlusTreeNode parent, int index, BPlusTreeNode node, BPlusTreeNode leftSibling) {
         if (node.isLeaf) {
-            // Leaf node
+            // Leaf node: borrow a key-value pair from the left sibling
             int parentKeyIndex = index - 1;
             int parentKey = parent.keys.get(parentKeyIndex);
 
-            //moving key
             int movingKey = leftSibling.keys.remove(leftSibling.keys.size() - 1);
-
             node.keys.add(0, movingKey);
             node.values.add(0, leftSibling.values.remove(leftSibling.values.size() - 1));
-            parent.keys.set(parentKeyIndex,movingKey );
+            parent.keys.set(parentKeyIndex, movingKey);
         } else {
-            // Internal node
+            // Internal node: borrow a key and child from the left sibling
             int parentKeyIndex = index - 1;
             int parentKey = parent.keys.get(parentKeyIndex);
 
@@ -236,9 +332,17 @@ public class BPlusTree {
         }
     }
 
+    /**
+     * Borrow a key and child from the right sibling.
+     *
+     * @param parent The parent node.
+     * @param index The index of the node in the parent's children list.
+     * @param node The current node.
+     * @param rightSibling The right sibling node.
+     */
     private void borrowFromRightSibling(BPlusTreeNode parent, int index, BPlusTreeNode node, BPlusTreeNode rightSibling) {
         if (node.isLeaf) {
-            // Leaf node
+            // Leaf node: borrow a key-value pair from the right sibling
             int parentKeyIndex = index;
             int parentKey = parent.keys.get(parentKeyIndex);
 
@@ -246,7 +350,7 @@ public class BPlusTree {
             node.values.add(rightSibling.values.remove(0));
             parent.keys.set(parentKeyIndex, rightSibling.keys.remove(0));
         } else {
-            // Internal node
+            // Internal node: borrow a key and child from the right sibling
             int parentKeyIndex = index;
             int parentKey = parent.keys.get(parentKeyIndex);
 
@@ -256,6 +360,14 @@ public class BPlusTree {
         }
     }
 
+    /**
+     * Merge a node with its left sibling.
+     *
+     * @param parent The parent node.
+     * @param index The index of the node in the parent's children list.
+     * @param node The current node.
+     * @param leftSibling The left sibling node.
+     */
     private void mergeWithLeftSibling(BPlusTreeNode parent, int index, BPlusTreeNode node, BPlusTreeNode leftSibling) {
         int parentKeyIndex = index - 1; // The index of the key in the parent separating the nodes
 
@@ -275,13 +387,22 @@ public class BPlusTree {
         if (parent.keys.size() < (order - 1) / 2 && parent != root) {
             handleUnderflow(parent);
         }
+
         // Handle the case where the parent node is empty
-        if(parent.keys.isEmpty()){
+        if (parent.keys.isEmpty()) {
             int midIndex = (leftSibling.keys.size() - 1) / 2;
             parent.keys.add(leftSibling.keys.get(midIndex));
         }
     }
 
+    /**
+     * Merge a node with its right sibling.
+     *
+     * @param parent The parent node.
+     * @param index The index of the node in the parent's children list.
+     * @param node The current node.
+     * @param rightSibling The right sibling node.
+     */
     private void mergeWithRightSibling(BPlusTreeNode parent, int index, BPlusTreeNode node, BPlusTreeNode rightSibling) {
         int parentKeyIndex = index; // The index of the parent key separating `node` and `rightSibling`
 
@@ -305,18 +426,30 @@ public class BPlusTree {
         if (parent.keys.size() < (order - 1) / 2 && parent != root) {
             handleUnderflow(parent);
         }
+
         // Handle the case where the parent node is empty
-        if(parent.keys.isEmpty()){
+        if (parent.keys.isEmpty()) {
             int midIndex = (rightSibling.keys.size() - 1) / 2;
             parent.keys.add(rightSibling.keys.get(midIndex));
         }
     }
 
+    /**
+     * Serialize a node to the ByteBuffer.
+     *
+     * @param node The node to serialize.
+     */
     private void serializeNode(BPlusTreeNode node) {
         buffer.position(node.offset);
         node.serialize(buffer);
     }
 
+    /**
+     * Print the structure of the B+ Tree.
+     *
+     * @param node The starting node (usually the root).
+     * @param indent The indentation for tree levels.
+     */
     public void printTree(BPlusTreeNode node, String indent) {
         System.out.println(indent + (node.isLeaf ? "Leaf" : "Internal") + " Node:");
         System.out.println(indent + "Keys: " + node.keys);
@@ -330,29 +463,4 @@ public class BPlusTree {
             }
         }
     }
-
-    public static void main(String[] args) {
-        BPlusTree tree = new BPlusTree();
-
-        // Test insertion
-        tree.insert(10, "Value10");
-        tree.insert(20, "Value20");
-        tree.insert(5,"da");
-
-        tree.delete(20);
-
-        // Print the tree
-        tree.printTree(tree.root, "");
-    }
 }
-
-
-
-
-
-
-
-
-
-
-
