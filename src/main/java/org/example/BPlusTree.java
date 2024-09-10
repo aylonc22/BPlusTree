@@ -42,7 +42,7 @@ public class BPlusTree {
         this.buffer.order(ByteOrder.BIG_ENDIAN);
         this.order = order;
         // Initialize the root as a leaf node and serialize it
-        this.root = new BPlusTreeNode(true, allocateNode(true));
+        this.root = new BPlusTreeNode(true, allocateNode(true),order);
         serializeNode(root);
     }
 
@@ -123,7 +123,8 @@ public class BPlusTree {
                 i++;
             }
             int childOffset = node.childrenOffsets.get(i);
-            node = BPlusTreeNode.deserialize(buffer, childOffset);
+            System.out.println("find leaf");
+            node = BPlusTreeNode.deserialize(buffer, childOffset,order);
         }
         return node;
     }
@@ -154,7 +155,7 @@ public class BPlusTree {
      */
     private void splitLeaf(BPlusTreeNode leaf, int key, String value) {
         int t = (order - 1) / 2; // Number of keys in each split node
-        BPlusTreeNode newLeaf = new BPlusTreeNode(true, allocateNode(true));
+        BPlusTreeNode newLeaf = new BPlusTreeNode(true, allocateNode(true),order);
 
         // Prepare lists to redistribute keys and values
         List<Integer> allKeys = new ArrayList<>(leaf.keys);
@@ -174,7 +175,7 @@ public class BPlusTree {
 
         // Update the root if necessary
         if (leaf == root) {
-            BPlusTreeNode newRoot = new BPlusTreeNode(false, allocateNode(false));
+            BPlusTreeNode newRoot = new BPlusTreeNode(false, allocateNode(false),order);
             newRoot.keys.add(newLeaf.keys.get(0));
             newRoot.childrenOffsets.add(leaf.offset);
             newRoot.childrenOffsets.add(newLeaf.offset);
@@ -203,7 +204,7 @@ public class BPlusTree {
      */
     private void splitInternalNode(BPlusTreeNode node) {
         int t = (order - 1) / 2; // Number of keys in each split node
-        BPlusTreeNode newInternal = new BPlusTreeNode(false, allocateNode(false));
+        BPlusTreeNode newInternal = new BPlusTreeNode(false, allocateNode(false),order);
 
         // Calculate the middle index
         int mid = t;
@@ -218,7 +219,7 @@ public class BPlusTree {
 
         if (node == root) {
             // Create a new root
-            BPlusTreeNode newRoot = new BPlusTreeNode(false, allocateNode(false));
+            BPlusTreeNode newRoot = new BPlusTreeNode(false, allocateNode(false),order);
             newRoot.keys.add(node.keys.get(mid));
             newRoot.childrenOffsets.add(node.offset);
             newRoot.childrenOffsets.add(newInternal.offset);
@@ -252,7 +253,8 @@ public class BPlusTree {
             return node;
         }
         for (Integer offset : node.childrenOffsets) {
-            BPlusTreeNode n = BPlusTreeNode.deserialize(buffer, offset);
+            System.out.println("find parent");
+            BPlusTreeNode n = BPlusTreeNode.deserialize(buffer, offset,order);
             BPlusTreeNode foundNode = findParent(n, child);
             if (foundNode != null) {
                 return foundNode;
@@ -303,7 +305,7 @@ public class BPlusTree {
         int index = parent.childrenOffsets.indexOf(node.offset);
 
         if (index > 0) {
-            BPlusTreeNode leftSibling = BPlusTreeNode.deserialize(buffer, parent.childrenOffsets.get(index - 1));
+            BPlusTreeNode leftSibling = BPlusTreeNode.deserialize(buffer, parent.childrenOffsets.get(index - 1),order);
             if (leftSibling.keys.size() > (order - 1) / 2) {
                 borrowFromLeftSibling(parent, index, node, leftSibling);
             } else {
@@ -311,7 +313,7 @@ public class BPlusTree {
             }
             serializeNode(leftSibling);
         } else if (index < parent.childrenOffsets.size() - 1) {
-            BPlusTreeNode rightSibling = BPlusTreeNode.deserialize(buffer, parent.childrenOffsets.get(index + 1));
+            BPlusTreeNode rightSibling = BPlusTreeNode.deserialize(buffer, parent.childrenOffsets.get(index + 1),order);
             if (rightSibling.keys.size() > (order - 1) / 2) {
                 borrowFromRightSibling(parent, index, node, rightSibling);
             } else {
@@ -461,6 +463,8 @@ public class BPlusTree {
     private void serializeNode(BPlusTreeNode node) {
         buffer.position(node.offset);
         node.serialize(buffer);
+        if(node.offset == 63)
+            BPlusTreeNode.deserialize(buffer,63,order);
     }
 
     /**
@@ -477,7 +481,7 @@ public class BPlusTree {
         } else {
             System.out.println(indent + "Children Offsets: " + node.childrenOffsets);
             for (Integer offset : node.childrenOffsets) {
-                BPlusTreeNode child = BPlusTreeNode.deserialize(buffer, offset);
+                BPlusTreeNode child = BPlusTreeNode.deserialize(buffer, offset,order);
                 printTree(child, indent + "  ");
             }
         }

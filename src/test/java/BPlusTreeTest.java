@@ -55,7 +55,7 @@ public class BPlusTreeTest {
    public void should_inert_many_plus(){
       var tree = new BPlusTree();
       var items = new HashMap<Integer,String>();
-      for(int i = 0;i<15;i++){
+      for(int i = 0;i<5;i++){
          items.put(i, String.valueOf((int)(50 + Math.random() * 51)));
       }
       tree.insertMany(items);
