@@ -56,7 +56,7 @@ public class BPlusTree {
         int maxKeys = order - 1; // Maximum number of keys in the node
         int keySize = 4; // Size of each key (assuming integer keys)
         int offsetSize = 4; // Size of each offset (assuming integer offsets)
-        int valueSize = 256; // Maximum size of each value (adjust as needed)
+        int valueSize = 15; // Maximum size of each value (adjust as needed)
 
         int nodeSize;
         if (isLeaf) {
@@ -267,7 +267,7 @@ public class BPlusTree {
      * @param key The key to search for.
      * @return The value associated with the key, or null if the key is not found.
      */
-    public Object search(int key) {
+    public String search(int key) {
         BPlusTreeNode leaf = findLeaf(root, key);
         int index = leaf.keys.indexOf(key);
         return index != -1 ? leaf.values.get(index) : null;

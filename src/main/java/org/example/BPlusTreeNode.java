@@ -46,6 +46,7 @@ public class BPlusTreeNode {
     }
 
     public void serialize(ByteBuffer buffer) {
+        System.out.println("Serializing node with " + keys.size() + " keys at offset " + buffer.position());
         buffer.put((byte) (isLeaf ? 1 : 0));
         buffer.putInt(keys.size());
         for (int key : keys) {
@@ -63,6 +64,7 @@ public class BPlusTreeNode {
                 buffer.putInt(offset);
             }
         }
+        System.out.println("serializing end at offset " + buffer.position());
     }
 }
 
