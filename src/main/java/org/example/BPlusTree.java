@@ -42,7 +42,7 @@ public class BPlusTree {
         this.buffer.order(ByteOrder.BIG_ENDIAN);
         this.order = order;
         // Initialize the root as a leaf node and serialize it
-        this.root = new BPlusTreeNode(true, allocateNode());
+        this.root = new BPlusTreeNode(true, allocateNode(true));
         serializeNode(root);
     }
 
@@ -51,9 +51,28 @@ public class BPlusTree {
      *
      * @return The position where the node is allocated.
      */
-    private int allocateNode() {
+    private int allocateNode(boolean isLeaf) {
+        // Calculate the size of a node based on the order
+        int maxKeys = order - 1; // Maximum number of keys in the node
+        int keySize = 4; // Size of each key (assuming integer keys)
+        int offsetSize = 4; // Size of each offset (assuming integer offsets)
+        int valueSize = 256; // Maximum size of each value (adjust as needed)
+
+        int nodeSize;
+        if (isLeaf) {
+            // Size calculation for leaf nodes
+            nodeSize = (maxKeys * keySize) + (maxKeys * valueSize);
+        } else {
+            // Size calculation for internal nodes
+            nodeSize = (maxKeys * keySize) + ((order * offsetSize) + (offsetSize * (maxKeys + 1)));
+        }
+
+        // Allocate space for the node
         int position = buffer.position();
-        buffer.position(position + 1024); // Allocate space for the node
+        if (position + nodeSize > buffer.capacity()) {
+            throw new RuntimeException("Buffer capacity exceeded during node allocation");
+        }
+        buffer.position(position + nodeSize); // Allocate space for the node
         return position;
     }
 
@@ -135,7 +154,7 @@ public class BPlusTree {
      */
     private void splitLeaf(BPlusTreeNode leaf, int key, String value) {
         int t = (order - 1) / 2; // Number of keys in each split node
-        BPlusTreeNode newLeaf = new BPlusTreeNode(true, allocateNode());
+        BPlusTreeNode newLeaf = new BPlusTreeNode(true, allocateNode(true));
 
         // Prepare lists to redistribute keys and values
         List<Integer> allKeys = new ArrayList<>(leaf.keys);
@@ -155,7 +174,7 @@ public class BPlusTree {
 
         // Update the root if necessary
         if (leaf == root) {
-            BPlusTreeNode newRoot = new BPlusTreeNode(false, allocateNode());
+            BPlusTreeNode newRoot = new BPlusTreeNode(false, allocateNode(false));
             newRoot.keys.add(newLeaf.keys.get(0));
             newRoot.childrenOffsets.add(leaf.offset);
             newRoot.childrenOffsets.add(newLeaf.offset);
@@ -184,7 +203,7 @@ public class BPlusTree {
      */
     private void splitInternalNode(BPlusTreeNode node) {
         int t = (order - 1) / 2; // Number of keys in each split node
-        BPlusTreeNode newInternal = new BPlusTreeNode(false, allocateNode());
+        BPlusTreeNode newInternal = new BPlusTreeNode(false, allocateNode(false));
 
         // Calculate the middle index
         int mid = t;
@@ -199,7 +218,7 @@ public class BPlusTree {
 
         if (node == root) {
             // Create a new root
-            BPlusTreeNode newRoot = new BPlusTreeNode(false, allocateNode());
+            BPlusTreeNode newRoot = new BPlusTreeNode(false, allocateNode(false));
             newRoot.keys.add(node.keys.get(mid));
             newRoot.childrenOffsets.add(node.offset);
             newRoot.childrenOffsets.add(newInternal.offset);

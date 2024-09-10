@@ -52,6 +52,16 @@ public class BPlusTreeTest {
       tree.printTree(tree.root,"");
    }
    @Test
+   public void should_inert_many_plus(){
+      var tree = new BPlusTree();
+      var items = new HashMap<Integer,String>();
+      for(int i = 0;i<15;i++){
+         items.put(i, String.valueOf((int)(50 + Math.random() * 51)));
+      }
+      tree.insertMany(items);
+      tree.printTree(tree.root,"");
+   }
+   @Test
    public  void should_split_root(){
       var tree = new BPlusTree();
       var items = new HashMap<Integer,String>();
