@@ -36,7 +36,7 @@ This project implements a B+ tree data structure in Java, enhanced with an arena
 
 
 ### Acknowledgement
-- Special thanks to [Michael Yarichuk](https://github.com/myarichuk) and [Nadav Inbar]("https://github.com/NadavInbar8") for inspiring and motivating this project.
+- Special thanks to [Michael Yarichuk](https://github.com/myarichuk) and [Nadav Inbar](https://github.com/NadavInbar8) for inspiring and motivating this project.
     
 ### Conclusion
 This project blends advanced data structure concepts with efficient memory management techniques, offering a scalable solution for managing and accessing sorted data in memory-intensive Java applications.
