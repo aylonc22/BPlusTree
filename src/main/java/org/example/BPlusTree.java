@@ -2,9 +2,7 @@ package org.example;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 /**
  * A B+ Tree implementation with an arena allocator for efficient memory management.
@@ -14,9 +12,10 @@ public class BPlusTree {
     private static final int DEFAULT_ORDER = 3; // Default order (maximum number of children per node)
     private static final int DEFAULT_MB = 1; // Default memory size (in megabytes) for the tree
     private ByteBuffer buffer; // Byte buffer to store the serialized nodes
-    public BPlusTreeNode root; // Root node of the B+ Tree
+    private BPlusTreeNode root; // Root node of the B+ Tree
     private int order; // Order of the B+ Tree
     private int lastAllocatedEndOffset = -1;
+    private Set<Integer> printedOffsets = new HashSet<>();
     /**
      * Default constructor initializing the B+ Tree with default memory size and order.
      */
@@ -73,7 +72,7 @@ public class BPlusTree {
         if (position + nodeSize > buffer.capacity()) {
             throw new RuntimeException("Buffer capacity exceeded during node allocation");
         }
-        buffer.position(node.offset); // Allocate space for the node
+        buffer.position(position + nodeSize); // Allocate space for the node
         lastAllocatedEndOffset = buffer.position();
         return node.offset;
     }
@@ -85,7 +84,6 @@ public class BPlusTree {
      */
     public void insertMany(HashMap<Integer, String> items) {
         for (var item : items.entrySet()) {
-            System.out.println("insertion");
             insert(item.getKey(), item.getValue());
         }
     }
@@ -126,7 +124,6 @@ public class BPlusTree {
                 i++;
             }
             int childOffset = node.childrenOffsets.get(i);
-            System.out.println("find leaf");
             node = BPlusTreeNode.deserialize(buffer, childOffset,order);
         }
         return node;
@@ -256,7 +253,6 @@ public class BPlusTree {
             return node;
         }
         for (Integer offset : node.childrenOffsets) {
-            System.out.println("find parent");
             BPlusTreeNode n = BPlusTreeNode.deserialize(buffer, offset,order);
             BPlusTreeNode foundNode = findParent(n, child);
             if (foundNode != null) {
@@ -466,25 +462,63 @@ public class BPlusTree {
     private void serializeNode(BPlusTreeNode node) {
         buffer.position(node.offset);
         node.serialize(buffer);
+        buffer.position(node.getEndOffset());
     }
 
+    /**
+     * Prints the structure of the B+ Tree starting from the root node, with custom indentation.
+     * This method is intended for cases where you want to control the indentation level manually.
+     *
+     * @param indent A string used for indentation to represent the tree's structure visually.
+     *               This allows the caller to specify how deeply indented the output should be.
+     */
+    public void printTree(String indent) {
+        // Clear the set of printed offsets to ensure a fresh start for printing.
+        printedOffsets.clear();
+
+        // Call the recursive printTree method to start printing from the root node.
+        printTree(root, indent);
+    }
+    /**
+     * Prints the structure of the B+ Tree starting from the root node, with default indentation.
+     * This method is a convenient wrapper that starts printing from the root with an empty
+     * indentation string. It's useful for a standard printout of the entire tree.
+     */
+    public void printTree() {
+        // Clear the set of printed offsets to ensure a fresh start for printing.
+        printedOffsets.clear();
+
+        // Call the recursive printTree method to start printing from the root node.
+        // Use an empty string for default indentation.
+        printTree(root, "");
+    }
     /**
      * Print the structure of the B+ Tree.
      *
      * @param node The starting node (usually the root).
      * @param indent The indentation for tree levels.
      */
-    public void printTree(BPlusTreeNode node, String indent) {
+    private void printTree(BPlusTreeNode node, String indent) {
+        // Check if this node has already been printed
+        if(printedOffsets.contains(node.offset)){
+            return; // Skip printing if already printed
+        }
+
+        // Print the node's details
         System.out.println(indent + (node.isLeaf ? "Leaf" : "Internal") + " Node:");
         System.out.println(indent + "Keys: " + node.keys);
         if (node.isLeaf) {
             System.out.println(indent + "Values: " + node.values);
         } else {
             System.out.println(indent + "Children Offsets: " + node.childrenOffsets);
+            // Recursively print child nodes
             for (Integer offset : node.childrenOffsets) {
                 BPlusTreeNode child = BPlusTreeNode.deserialize(buffer, offset,order);
                 printTree(child, indent + "  ");
             }
         }
+
+        // Mark this node as printed
+        printedOffsets.add((node.offset));
     }
 }

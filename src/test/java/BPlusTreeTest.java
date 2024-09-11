@@ -12,7 +12,7 @@ public class BPlusTreeTest {
 
       var tree = new BPlusTree();
       tree.insert(3,"4");
-      tree.printTree(tree.root,"test");
+      tree.printTree("test");
    }
    @Test
     public void should_fail_to_create_tree_on_small_order(){
@@ -39,7 +39,7 @@ public class BPlusTreeTest {
       var tree = new BPlusTree();
       tree.insert(3,"4");
       tree.insert(2,"4");
-      tree.printTree(tree.root,"");
+      tree.printTree("");
    }
    @Test
    public void should_inert_many(){
@@ -49,17 +49,17 @@ public class BPlusTreeTest {
          items.put(i, String.valueOf((int)(50 + Math.random() * 51)));
       }
       tree.insertMany(items);
-      tree.printTree(tree.root,"");
+      tree.printTree("");
    }
    @Test
    public void should_inert_many_plus(){
       var tree = new BPlusTree();
       var items = new HashMap<Integer,String>();
-      for(int i = 0;i<2;i++){
+      for(int i = 0;i<30;i++){
          items.put(i, String.valueOf((int)(50 + Math.random() * 51)));
       }
       tree.insertMany(items);
-      tree.printTree(tree.root,"");
+      tree.printTree();
    }
    @Test
    public  void should_split_root(){
@@ -69,7 +69,7 @@ public class BPlusTreeTest {
          items.put(i, String.valueOf((int)(50 + Math.random() * 51)));
       }
       tree.insertMany(items);
-      tree.printTree(tree.root,"");
+      tree.printTree("");
    }
    @Test
    public void should_delete_from_root(){
@@ -78,7 +78,7 @@ public class BPlusTreeTest {
       tree.insert(1,"test2");
 
       tree.delete(1);
-      tree.printTree(tree.root,"");
+      tree.printTree("");
 
    }
    @Test
@@ -89,7 +89,7 @@ public class BPlusTreeTest {
       tree.insert(2,"test");
 
       tree.delete(2);
-      tree.printTree(tree.root,"");
+      tree.printTree("");
    }
    @Test
    public void should_handle_under_flow_from_left_merge(){
@@ -100,7 +100,7 @@ public class BPlusTreeTest {
 
       tree.delete(2);
       tree.delete(1);
-      tree.printTree(tree.root,"");
+      tree.printTree("");
 
    }
 
@@ -114,6 +114,6 @@ public class BPlusTreeTest {
       tree.insertMany(items);
 
       tree.delete(4);
-      tree.printTree(tree.root,"");
+      tree.printTree("");
    }
 }

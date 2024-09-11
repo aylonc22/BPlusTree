@@ -65,8 +65,7 @@ public class BPlusTreeNode {
     }
 
     public static BPlusTreeNode deserialize(ByteBuffer buffer, int offset,int order) {
-            System.out.println("deserializing node at offset " + offset);
-
+        //System.out.println("deserializing node at offset " + offset);
 
         buffer.position(offset);
         boolean isLeaf = buffer.get() == 1;
@@ -90,14 +89,14 @@ public class BPlusTreeNode {
             }
         }
 
-            System.out.println(node);
+            //System.out.println(node);
 
 
         return node;
     }
 
     public void serialize(ByteBuffer buffer) {
-        System.out.print("Serializing node with " + keys.size() + " keys at offset " + buffer.position());
+        //System.out.print("Serializing node with " + keys.size() + " keys at offset " + buffer.position());
         buffer.put((byte) (isLeaf ? 1 : 0));
         buffer.putInt(keys.size());
         for (int key : keys) {
@@ -115,9 +114,9 @@ public class BPlusTreeNode {
                 buffer.putInt(offset);
             }
         }
-        System.out.println(" serializing end at offset " +buffer.position() +" and the end buffer offset is " + getEndOffset());
+        //System.out.println(" serializing end at offset " +buffer.position() +" and the end buffer offset is " + getEndOffset());
 
-            System.out.println(this);
+           // System.out.println(this);
 
     }
 }
