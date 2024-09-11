@@ -16,7 +16,7 @@ public class BPlusTree {
     private ByteBuffer buffer; // Byte buffer to store the serialized nodes
     public BPlusTreeNode root; // Root node of the B+ Tree
     private int order; // Order of the B+ Tree
-
+    private int lastAllocatedEndOffset = -1;
     /**
      * Default constructor initializing the B+ Tree with default memory size and order.
      */
@@ -68,12 +68,14 @@ public class BPlusTree {
         }
 
         // Allocate space for the node
-        int position = buffer.position();
+        BPlusTreeNode node = BPlusTreeNode.deserialize(buffer,root!=null?lastAllocatedEndOffset:0,order);
+        int position = node.getEndOffset();
         if (position + nodeSize > buffer.capacity()) {
             throw new RuntimeException("Buffer capacity exceeded during node allocation");
         }
-        buffer.position(position + nodeSize); // Allocate space for the node
-        return position;
+        buffer.position(node.offset); // Allocate space for the node
+        lastAllocatedEndOffset = buffer.position();
+        return node.offset;
     }
 
     /**
@@ -83,6 +85,7 @@ public class BPlusTree {
      */
     public void insertMany(HashMap<Integer, String> items) {
         for (var item : items.entrySet()) {
+            System.out.println("insertion");
             insert(item.getKey(), item.getValue());
         }
     }
@@ -463,8 +466,6 @@ public class BPlusTree {
     private void serializeNode(BPlusTreeNode node) {
         buffer.position(node.offset);
         node.serialize(buffer);
-        if(node.offset == 63)
-            BPlusTreeNode.deserialize(buffer,63,order);
     }
 
     /**
