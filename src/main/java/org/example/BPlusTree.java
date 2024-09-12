@@ -466,8 +466,7 @@ public class BPlusTree {
     }
 
     /**
-     * Prints the structure of the B+ Tree starting from the root node, with custom indentation.
-     * This method is intended for cases where you want to control the indentation level manually.
+     * Print the structure of the B+ Tree starting from the root node, with custom indentation.
      *
      * @param indent A string used for indentation to represent the tree's structure visually.
      *               This allows the caller to specify how deeply indented the output should be.
@@ -475,50 +474,57 @@ public class BPlusTree {
     public void printTree(String indent) {
         // Clear the set of printed offsets to ensure a fresh start for printing.
         printedOffsets.clear();
-
         // Call the recursive printTree method to start printing from the root node.
-        printTree(root, indent);
+        printTree(root, indent, null);
     }
+
     /**
-     * Prints the structure of the B+ Tree starting from the root node, with default indentation.
-     * This method is a convenient wrapper that starts printing from the root with an empty
-     * indentation string. It's useful for a standard printout of the entire tree.
+     * Print the structure of the B+ Tree starting from the root node, with default indentation.
      */
     public void printTree() {
         // Clear the set of printed offsets to ensure a fresh start for printing.
         printedOffsets.clear();
-
         // Call the recursive printTree method to start printing from the root node.
-        // Use an empty string for default indentation.
-        printTree(root, "");
+        printTree(root, "", null);
     }
+
     /**
      * Print the structure of the B+ Tree.
      *
      * @param node The starting node (usually the root).
      * @param indent The indentation for tree levels.
+     * @param parentOffset The offset of the parent node, used to show parent-child relationships.
      */
-    private void printTree(BPlusTreeNode node, String indent) {
+    private void printTree(BPlusTreeNode node, String indent, Integer parentOffset) {
         // Check if this node has already been printed
-        if(printedOffsets.contains(node.offset)){
+        if (printedOffsets.contains(node.offset)) {
             return; // Skip printing if already printed
         }
 
-        // Print the node's details
-        System.out.println(indent + (node.isLeaf ? "Leaf" : "Internal") + " Node:");
-        System.out.println(indent + "Keys: " + node.keys);
+        // Print node type, offset, and keys
+        String nodeType = node.isLeaf ? "Leaf" : "Internal";
+        System.out.println(indent + nodeType + " Node (Offset: " + node.offset + "):");
+        System.out.println(indent + "  Keys: " + node.keys);
         if (node.isLeaf) {
-            System.out.println(indent + "Values: " + node.values);
+            System.out.println(indent + "  Values: " + node.values);
         } else {
-            System.out.println(indent + "Children Offsets: " + node.childrenOffsets);
-            // Recursively print child nodes
-            for (Integer offset : node.childrenOffsets) {
-                BPlusTreeNode child = BPlusTreeNode.deserialize(buffer, offset,order);
-                printTree(child, indent + "  ");
-            }
+            System.out.println(indent + "  Children Offsets: " + node.childrenOffsets);
+        }
+
+        // Print the parent-child relationship if a parentOffset is provided
+        if (parentOffset != null) {
+            System.out.println(indent + "  Parent Offset: " + parentOffset);
         }
 
         // Mark this node as printed
-        printedOffsets.add((node.offset));
+        printedOffsets.add(node.offset);
+
+        // Recursively print child nodes for internal nodes
+        if (!node.isLeaf) {
+            for (Integer offset : node.childrenOffsets) {
+                BPlusTreeNode child = BPlusTreeNode.deserialize(buffer, offset, order);
+                printTree(child, indent + "  ", node.offset);
+            }
+        }
     }
 }
