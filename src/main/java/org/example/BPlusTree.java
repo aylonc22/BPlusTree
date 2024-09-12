@@ -231,7 +231,7 @@ public class BPlusTree {
             parent.keys.add(index, node.keys.get(mid));
             parent.childrenOffsets.add(index + 1, newInternal.offset);
 
-            if (parent.keys.size() >= order - 1) {
+            if (parent.keys.size() > order - 1) {
                 splitInternalNode(parent);
             } else {
                 serializeNode(parent);
